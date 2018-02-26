@@ -1,6 +1,8 @@
 RegisterServerEvent('eden_garage:debug')
 RegisterServerEvent('eden_garage:modifystate')
 RegisterServerEvent('eden_garage:pay')
+RegisterServerEvent('eden_garage:payhealth')
+RegisterServerEvent('eden_garage:logging')
 
 
 ESX                = nil
@@ -31,7 +33,7 @@ ESX.RegisterServerCallback('eden_garage:stockv',function(source,cb, vehicleProps
 	local xPlayer = ESX.GetPlayerFromId(_source)
 	local vehicules = getPlayerVehicles(xPlayer.getIdentifier())
 	local plate = vehicleProps.plate
-
+	print(plate)
 	
 		for _,v in pairs(vehicules) do
 			if(plate == v.plate)then
@@ -66,7 +68,19 @@ AddEventHandler('eden_garage:modifystate', function(vehicleProps, state)
 	end
 end)	
 
+--Get user properties
+ESX.RegisterServerCallback('eden_garage:getOwnedProperties',function(source, cb)	
+	local _source = source
+	local xPlayer = ESX.GetPlayerFromId(_source)
+	local properties = {}
 
+	MySQL.Async.fetchAll("SET @ownedProperties = (SELECT name FROM owned_properties WHERE owner=@identifier);SET @gateways = (SELECT gateway FROM properties WHERE name = @ownedProperties AND gateway IS NOT NULL);SELECT name FROM properties WHERE name = @ownedProperties AND gateway = @gateways OR name = @gateways AND gateway IS NULL OR name = @ownedProperties AND gateway IS NULL;",{['@identifier'] = xPlayer.getIdentifier()}, function(data) 
+		for _,v in pairs(data) do
+			table.insert(properties, v.name)
+		end
+		cb(properties)
+	end)
+end)
 
 --Fin change le state du véhicule
 
@@ -110,7 +124,7 @@ AddEventHandler('eden_garage:pay', function()
 
 	xPlayer.removeMoney(Config.Price)
 
-	TriggerClientEvent('esx:showNotification', source, 'Vous avez payé ' .. Config.Price)
+	TriggerClientEvent('esx:showNotification', source, _U('you_paid')..' ' .. Config.Price)
 
 end)
 --Fin fonction qui retire argent
@@ -181,3 +195,24 @@ AddEventHandler('onMySQLReady', function()
 
 end)
 -- Fin Fonction qui change les etats sorti en rentré lors d'un restart
+
+
+--debut de payement pour la santé vehicule
+AddEventHandler('eden_garage:payhealth', function(price)
+
+	local xPlayer = ESX.GetPlayerFromId(source)
+
+	xPlayer.removeMoney(price)
+
+	TriggerClientEvent('esx:showNotification', source, _U('you_paid')..' ' .. price)
+
+end)
+--fin de payement pour la santé vehicule
+
+
+--logger dans la console
+AddEventHandler('eden_garage:logging', function(logging)
+	RconPrint(logging)
+end)
+
+--fin de logger dans la console
