@@ -18,8 +18,10 @@ local HasAlreadyEnteredMarker   = false
 local LastZone                  = nil
 local CurrentActionMsg          = ''
 local CurrentActionData         = {}
-
+local times 			= 0
+local userProperties = {}
 local this_Garage = {}
+
 -- Fin Local
 
 -- Init ESX
@@ -37,7 +39,13 @@ end)
 RegisterNetEvent('esx:playerLoaded')
 AddEventHandler('esx:playerLoaded', function(xPlayer)
     --PlayerData = xPlayer
-    --TriggerServerEvent('esx_jobs:giveBackCautionInCaseOfDrop')
+		--TriggerServerEvent('esx_jobs:giveBackCautionInCaseOfDrop')
+		if Config.PropertyGarages then
+			ESX.TriggerServerCallback('eden_garage:getOwnedProperties', function(properties)
+				userProperties = properties
+				PrivateGarageBlips()
+			end)
+		end
     refreshBlips()
 end)
 
@@ -47,37 +55,89 @@ function refreshBlips()
 
 	for zoneKey,zoneValues in pairs(Config.Garages)do
 
-		local blip = AddBlipForCoord(zoneValues.Pos.x, zoneValues.Pos.y, zoneValues.Pos.z)
-		SetBlipSprite (blip, Config.BlipInfos.Sprite)
-		SetBlipDisplay(blip, 4)
-		SetBlipScale  (blip, 1.2)
-		SetBlipColour (blip, Config.BlipInfos.Color)
-		SetBlipAsShortRange(blip, true)
-		BeginTextCommandSetBlipName("STRING")
-		AddTextComponentString(zoneKey)
-		EndTextCommandSetBlipName(blip)
+		if not zoneValues.Private then
+			local blip = AddBlipForCoord(zoneValues.Pos.x, zoneValues.Pos.y, zoneValues.Pos.z)
+			SetBlipSprite (blip, Config.BlipInfos.Sprite)
+			SetBlipDisplay(blip, 4)
+			SetBlipScale  (blip, 1.2)
+			SetBlipColour (blip, Config.BlipInfos.Color)
+			SetBlipAsShortRange(blip, true)
+			BeginTextCommandSetBlipName("STRING")
+			AddTextComponentString(_U('public_garage'))
+			EndTextCommandSetBlipName(blip)
+		end
+		
+		if zoneValues.MunicipalPoundPoint then
+			local blip = AddBlipForCoord(zoneValues.MunicipalPoundPoint.Pos.x, zoneValues.MunicipalPoundPoint.Pos.y, zoneValues.MunicipalPoundPoint.Pos.z)
+			SetBlipSprite (blip, Config.BlipPound.Sprite)
+			SetBlipDisplay(blip, 4)
+			SetBlipScale  (blip, 1.2)
+			SetBlipColour (blip, Config.BlipPound.Color)
+			SetBlipAsShortRange(blip, true)
+			BeginTextCommandSetBlipName("STRING")
+			AddTextComponentString(_U("municipal_pound"))
+			EndTextCommandSetBlipName(blip)
+		end
 	end
 end
 -- Fin Gestion des Blips
 
+local function has_value (tab, val)
+	for index, value in ipairs(tab) do
+			if value == val then
+					return true
+			end
+	end
+
+	return false
+end
+
+local privateBlips = {}
+function PrivateGarageBlips()
+	for _,blip in pairs(privateBlips) do
+		RemoveBlip(blip)
+	end
+	privateBlips = {}
+	for zoneKey,zoneValues in pairs(Config.Garages)do
+		if zoneValues.Private and has_value(userProperties, zoneValues.Private) then
+			local blip = AddBlipForCoord(zoneValues.Pos.x, zoneValues.Pos.y, zoneValues.Pos.z)
+			SetBlipSprite (blip, Config.BlipPrivate.Sprite)
+			SetBlipDisplay(blip, 4)
+			SetBlipScale  (blip, 1)
+			SetBlipColour (blip, Config.BlipPrivate.Color)
+			SetBlipAsShortRange(blip, true)
+			BeginTextCommandSetBlipName("STRING")
+			AddTextComponentString(_U('private_garage'))
+			EndTextCommandSetBlipName(blip)
+		end
+	end
+end
+
 --Fonction Menu
 
-function OpenMenuGarage()
-	
-	
+function OpenMenuGarage(PointType)
+
 	ESX.UI.Menu.CloseAll()
 
-	local elements = {
-		{label = "Liste des véhicules", value = 'list_vehicles'},
-		{label = "Rentrer vehicules", value = 'stock_vehicle'},
-		{label = "Retour vehicule ("..Config.Price.."$)", value = 'return_vehicle'},
-	}
+	local elements = {}
 
+	
+	if PointType == 'spawn' then
+		table.insert(elements,{label = _U('list_vehicles'), value = 'list_vehicles'})
+	end
+
+	if PointType == 'delete' then
+		table.insert(elements,{label = _U('stock_vehicle'), value = 'stock_vehicle'})
+	end
+
+	if PointType == 'pound' then
+		table.insert(elements,{label = _U('return_vehicle').." ("..Config.Price.."$)", value = 'return_vehicle'})
+	end
 
 	ESX.UI.Menu.Open(
 		'default', GetCurrentResourceName(), 'garage_menu',
 		{
-			title    = 'Garage',
+			title    = _U('garage'),
 			align    = 'top-left',
 			elements = elements,
 		},
@@ -96,15 +156,16 @@ function OpenMenuGarage()
 
 			local playerPed = GetPlayerPed(-1)
 			SpawnVehicle(data.current.value)
-			--local coords    = societyConfig.Zones.VehicleSpawnPoint.Pos
 
 		end,
 		function(data, menu)
 			menu.close()
-			--CurrentAction = 'open_garage_action'
+			
 		end
 	)	
 end
+
+
 -- Afficher les listes des vehicules
 function ListVehiclesMenu()
 	local elements = {}
@@ -118,10 +179,10 @@ function ListVehiclesMenu()
     		local labelvehicle
 
     		if(v.state)then
-    		labelvehicle = vehicleName..': Rentré'
+    		labelvehicle = vehicleName..': '.._U('garage')
     		
     		else
-    		labelvehicle = vehicleName..': Sortie'
+    		labelvehicle = vehicleName..': '.._U('municipal_pound')
     		end	
 			table.insert(elements, {label =labelvehicle , value = v})
 			
@@ -139,7 +200,7 @@ function ListVehiclesMenu()
 				menu.close()
 				SpawnVehicle(data.current.value.vehicle)
 			else
-				TriggerEvent('esx:showNotification', 'Votre véhicule est déjà sorti')
+				TriggerEvent('esx:showNotification', _U('vehicle_is_impounded'))
 			end
 		end,
 		function(data, menu)
@@ -150,28 +211,75 @@ function ListVehiclesMenu()
 	end)
 end
 -- Fin Afficher les listes des vehicules
+function reparation(prix,vehicle,vehicleProps)
+	
+	ESX.UI.Menu.CloseAll()
+
+	local elements = {
+		{label = _U('return_vehicle').." ("..prix.."$)", value = 'yes'},
+		{label = _U('see_mechanic'), value = 'no'},
+	}
+	ESX.UI.Menu.Open(
+		'default', GetCurrentResourceName(), 'delete_menu',
+		{
+			title    = _U('damaged_vehicle'),
+			align    = 'top-left',
+			elements = elements,
+		},
+		function(data, menu)
+
+			menu.close()
+			if(data.current.value == 'yes') then
+				TriggerServerEvent('eden_garage:payhealth', prix)
+				ranger(vehicle,vehicleProps)
+			end
+			if(data.current.value == 'no') then
+				ESX.ShowNotification(_U('visit_mechanic'))
+			end
+
+		end,
+		function(data, menu)
+			menu.close()
+			
+		end
+	)	
+end
+
+function ranger(vehicle,vehicleProps)
+	ESX.Game.DeleteVehicle(vehicle)
+	TriggerServerEvent('eden_garage:modifystate', vehicleProps, true)
+	TriggerEvent('esx:showNotification', _U('vehicle_in_garage'))
+end
 
 -- Fonction qui permet de rentrer un vehicule
 function StockVehicleMenu()
 	local playerPed  = GetPlayerPed(-1)
-	if IsAnyVehicleNearPoint(this_Garage.DeletePoint.Pos.x,  this_Garage.DeletePoint.Pos.y,  this_Garage.DeletePoint.Pos.z,  3.5) then
+	if IsPedInAnyVehicle(playerPed,  false) then
 
-		local vehicle       = GetClosestVehicle(this_Garage.DeletePoint.Pos.x, this_Garage.DeletePoint.Pos.y, this_Garage.DeletePoint.Pos.z, this_Garage.DeletePoint.Size.x, 0, 70)
+		local playerPed = GetPlayerPed(-1)
+    	local coords    = GetEntityCoords(playerPed)
+    	local vehicle =GetVehiclePedIsIn(playerPed,false)     
 		local vehicleProps  = ESX.Game.GetVehicleProperties(vehicle)
+		local current 	    = GetPlayersLastVehicle(GetPlayerPed(-1), true)
+		local engineHealth  = GetVehicleEngineHealth(current)
 
 		ESX.TriggerServerCallback('eden_garage:stockv',function(valid)
 
-			if(valid) then
-				TriggerServerEvent('eden_garage:debug', vehicle)
-				DeleteVehicle(vehicle)
-				TriggerServerEvent('eden_garage:modifystate', vehicleProps, true)
-				TriggerEvent('esx:showNotification', 'Votre véhicule est dans le garage')
+			if (valid) then
+				TriggerServerEvent('eden_garage:debug', "plaque vehicule rentree au garage: "  .. vehicleProps.plate)
+				TriggerServerEvent('eden_garage:logging',"santee vehicule rentree au garage: " .. engineHealth)
+				if engineHealth < 1000 then
+			        local fraisRep= math.ceil((1000 - engineHealth)/1000*Config.Price*Config.DamageMultiplier)
+			        reparation(fraisRep,vehicle,vehicleProps)
+			    else
+			    	ranger(vehicle,vehicleProps)
+			    end	
 			else
-				TriggerEvent('esx:showNotification', 'Vous ne pouvez pas stocker ce véhicule')
+				TriggerEvent('esx:showNotification', _U('cannot_store_vehicle'))
 			end
 		end,vehicleProps)
 	else
-		TriggerEvent('esx:showNotification', 'Il n\' y a pas de vehicule à rentrer')
+		TriggerEvent('esx:showNotification', _('no_vehicle_to_enter'))
 	end
 
 end
@@ -182,23 +290,62 @@ end
 --Fonction pour spawn vehicule
 function SpawnVehicle(vehicle)
 
-	ESX.Game.SpawnVehicle(vehicle.model, {
-		x = this_Garage.SpawnPoint.Pos.x ,
-		y = this_Garage.SpawnPoint.Pos.y,
-		z = this_Garage.SpawnPoint.Pos.z + 1											
-		},120, function(callback_vehicle)
+	ESX.Game.SpawnVehicle(vehicle.model,{
+		x=this_Garage.SpawnPoint.Pos.x ,
+		y=this_Garage.SpawnPoint.Pos.y,
+		z=this_Garage.SpawnPoint.Pos.z + 1											
+		},this_Garage.SpawnPoint.Heading, function(callback_vehicle)
 		ESX.Game.SetVehicleProperties(callback_vehicle, vehicle)
+		SetVehRadioStation(callback_vehicle, "OFF")
+		TaskWarpPedIntoVehicle(GetPlayerPed(-1), callback_vehicle, -1)
+		local plate = GetVehicleNumberPlateText(callback_vehicle)
+		TriggerServerEvent("ls:mainCheck", plate, callback_vehicle, true)
 		end)
+		
+
 	TriggerServerEvent('eden_garage:modifystate', vehicle, false)
 
 end
 --Fin fonction pour spawn vehicule
 
+--Fonction pour spawn vehicule fourriere
+function SpawnPoundedVehicle(vehicle)
+
+	ESX.Game.SpawnVehicle(vehicle.model, {
+		x = this_Garage.SpawnMunicipalPoundPoint.Pos.x ,
+		y = this_Garage.SpawnMunicipalPoundPoint.Pos.y,
+		z = this_Garage.SpawnMunicipalPoundPoint.Pos.z + 1											
+		},180, function(callback_vehicle)
+		ESX.Game.SetVehicleProperties(callback_vehicle, vehicle)
+		local plate = GetVehicleNumberPlateText(callback_vehicle)
+		TriggerServerEvent("ls:mainCheck", plate, callback_vehicle, true)
+		end)
+	TriggerServerEvent('eden_garage:modifystate', vehicle, true)
+
+	ESX.SetTimeout(10000, function()
+		TriggerServerEvent('eden_garage:modifystate', vehicle, false)
+	end)
+
+end
+--Fin fonction pour spawn vehicule fourriere
 --Action das les markers
 AddEventHandler('eden_garage:hasEnteredMarker', function(zone)
-	if zone == 'garage' then
-		CurrentAction     = 'garage_action_menu'
-		CurrentActionMsg  = "Appuyer sur ~INPUT_PICKUP~ pour ouvrir le garage"
+
+	if zone == 'spawn' then
+		CurrentAction     = 'spawn'
+		CurrentActionMsg  = _U('press_to_enter')
+		CurrentActionData = {}
+	end
+
+	if zone == 'delete' then
+		CurrentAction     = 'delete'
+		CurrentActionMsg  = _U('press_to_delete')
+		CurrentActionData = {}
+	end
+	
+	if zone == 'pound' then
+		CurrentAction     = 'pound_action_menu'
+		CurrentActionMsg  = _U('press_to_impound')
 		CurrentActionData = {}
 	end
 end)
@@ -221,7 +368,7 @@ function ReturnVehicleMenu()
     		local vehicleName = GetDisplayNameFromVehicleModel(hashVehicule)
     		local labelvehicle
 
-    		labelvehicle = vehicleName..': Sortie'
+    		labelvehicle = vehicleName..': '.._U('return')
     	
 			table.insert(elements, {label =labelvehicle , value = v})
 			
@@ -230,19 +377,26 @@ function ReturnVehicleMenu()
 		ESX.UI.Menu.Open(
 		'default', GetCurrentResourceName(), 'return_vehicle',
 		{
-			title    = 'Garage',
+			title    = _U('garage'),
 			align    = 'top-left',
 			elements = elements,
 		},
 		function(data, menu)
-
+	
 			ESX.TriggerServerCallback('eden_garage:checkMoney', function(hasEnoughMoney)
 				if hasEnoughMoney then
-							
-					TriggerServerEvent('eden_garage:pay')
-					SpawnVehicle(data.current.value)
+					
+					if times == 0 then
+						TriggerServerEvent('eden_garage:pay')
+						SpawnPoundedVehicle(data.current.value)
+						times=times+1
+					elseif times > 0 then
+						ESX.SetTimeout(60000, function()
+						times=0
+						end)
+					end
 				else
-					ESX.ShowNotification('Vous n\'avez pas assez d\'argent')						
+					ESX.ShowNotification(_U('not_enough_money'))						
 				end
 			end)
 		end,
@@ -261,12 +415,16 @@ Citizen.CreateThread(function()
 		local coords = GetEntityCoords(GetPlayerPed(-1))			
 
 		for k,v in pairs(Config.Garages) do
-			if(GetDistanceBetweenCoords(coords, v.Pos.x, v.Pos.y, v.Pos.z, true) < Config.DrawDistance) then		
-				DrawMarker(v.Marker, v.Pos.x, v.Pos.y, v.Pos.z, 0.0, 0.0, 0.0, 0, 0.0, 0.0, v.Size.x, v.Size.y, v.Size.z, v.Color.r, v.Color.g, v.Color.b, 100, false, true, 2, false, false, false, false)
-				DrawMarker(v.SpawnPoint.Marker, v.SpawnPoint.Pos.x, v.SpawnPoint.Pos.y, v.SpawnPoint.Pos.z, 0.0, 0.0, 0.0, 0, 0.0, 0.0, v.SpawnPoint.Size.x, v.SpawnPoint.Size.y, v.SpawnPoint.Size.z, v.SpawnPoint.Color.r, v.SpawnPoint.Color.g, v.SpawnPoint.Color.b, 100, false, true, 2, false, false, false, false)	
-				DrawMarker(v.DeletePoint.Marker, v.DeletePoint.Pos.x, v.DeletePoint.Pos.y, v.DeletePoint.Pos.z, 0.0, 0.0, 0.0, 0, 0.0, 0.0, v.DeletePoint.Size.x, v.DeletePoint.Size.y, v.DeletePoint.Size.z, v.DeletePoint.Color.r, v.DeletePoint.Color.g, v.DeletePoint.Color.b, 100, false, true, 2, false, false, false, false)	
-
-			end		
+			if not v.Private or has_value(userProperties, v.Private) then
+				if(GetDistanceBetweenCoords(coords, v.Pos.x, v.Pos.y, v.Pos.z, true) < Config.DrawDistance) then		
+					DrawMarker(v.SpawnPoint.Marker, v.SpawnPoint.Pos.x, v.SpawnPoint.Pos.y, v.SpawnPoint.Pos.z, 0.0, 0.0, 0.0, 0, 0.0, 0.0, v.SpawnPoint.Size.x, v.SpawnPoint.Size.y, v.SpawnPoint.Size.z, v.SpawnPoint.Color.r, v.SpawnPoint.Color.g, v.SpawnPoint.Color.b, 100, false, true, 2, false, false, false, false)	
+					DrawMarker(v.DeletePoint.Marker, v.DeletePoint.Pos.x, v.DeletePoint.Pos.y, v.DeletePoint.Pos.z, 0.0, 0.0, 0.0, 0, 0.0, 0.0, v.DeletePoint.Size.x, v.DeletePoint.Size.y, v.DeletePoint.Size.z, v.DeletePoint.Color.r, v.DeletePoint.Color.g, v.DeletePoint.Color.b, 100, false, true, 2, false, false, false, false)	
+				end
+				if(v.MunicipalPoundPoint and GetDistanceBetweenCoords(coords, v.MunicipalPoundPoint.Pos.x, v.MunicipalPoundPoint.Pos.y, v.MunicipalPoundPoint.Pos.z, true) < Config.DrawDistance) then
+					DrawMarker(v.MunicipalPoundPoint.Marker, v.MunicipalPoundPoint.Pos.x, v.MunicipalPoundPoint.Pos.y, v.MunicipalPoundPoint.Pos.z, 0.0, 0.0, 0.0, 0, 0.0, 0.0, v.MunicipalPoundPoint.Size.x, v.MunicipalPoundPoint.Size.y, v.MunicipalPoundPoint.Size.z, v.MunicipalPoundPoint.Color.r, v.MunicipalPoundPoint.Color.g, v.MunicipalPoundPoint.Color.b, 100, false, true, 2, false, false, false, false)	
+					DrawMarker(v.SpawnMunicipalPoundPoint.Marker, v.SpawnMunicipalPoundPoint.Pos.x, v.SpawnMunicipalPoundPoint.Pos.y, v.SpawnMunicipalPoundPoint.Pos.z, 0.0, 0.0, 0.0, 0, 0.0, 0.0, v.SpawnMunicipalPoundPoint.Size.x, v.SpawnMunicipalPoundPoint.Size.y, v.SpawnMunicipalPoundPoint.Size.z, v.SpawnMunicipalPoundPoint.Color.r, v.SpawnMunicipalPoundPoint.Color.g, v.SpawnMunicipalPoundPoint.Color.b, 100, false, true, 2, false, false, false, false)
+				end		
+			end
 		end	
 	end
 end)
@@ -283,9 +441,23 @@ Citizen.CreateThread(function()
 		local isInMarker  = false
 
 		for _,v in pairs(Config.Garages) do
-			if(GetDistanceBetweenCoords(coords, v.Pos.x, v.Pos.y, v.Pos.z, true) < v.Size.x) then
-				isInMarker  = true
-				this_Garage = v
+			if not v.Private or has_value(userProperties, v.Private) then
+				if(GetDistanceBetweenCoords(coords, v.SpawnPoint.Pos.x, v.SpawnPoint.Pos.y, v.SpawnPoint.Pos.z, true) < v.Size.x) then
+					isInMarker  = true
+					this_Garage = v
+					currentZone = 'spawn'
+				end
+
+				if(GetDistanceBetweenCoords(coords, v.DeletePoint.Pos.x, v.DeletePoint.Pos.y, v.DeletePoint.Pos.z, true) < v.Size.x) then
+					isInMarker  = true
+					this_Garage = v
+					currentZone = 'delete'
+				end
+				if(v.MunicipalPoundPoint and GetDistanceBetweenCoords(coords, v.MunicipalPoundPoint.Pos.x, v.MunicipalPoundPoint.Pos.y, v.MunicipalPoundPoint.Pos.z, true) < v.MunicipalPoundPoint.Size.x) then
+					isInMarker  = true
+					this_Garage = v
+					currentZone = 'pound'
+				end
 			end
 		end
 
@@ -304,7 +476,7 @@ Citizen.CreateThread(function()
 end)
 
 
--- Fin activer le menu quand player dedans
+-- Fin activer le menu fourriere quand player dedans
 
 -- Controle touche
 Citizen.CreateThread(function()
@@ -320,9 +492,16 @@ Citizen.CreateThread(function()
 
 			if IsControlPressed(0,  Keys['E']) and (GetGameTimer() - GUI.Time) > 150 then
 
-				if CurrentAction == 'garage_action_menu' then
-					OpenMenuGarage()
+				if CurrentAction == 'pound_action_menu' then
+					OpenMenuGarage('pound')
 				end
+				if CurrentAction == 'spawn' then
+					OpenMenuGarage('spawn')
+				end
+				if CurrentAction == 'delete' then
+					OpenMenuGarage('delete')
+				end
+
 
 				CurrentAction = nil
 				GUI.Time      = GetGameTimer()
